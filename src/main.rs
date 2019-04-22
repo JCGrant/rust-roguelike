@@ -198,7 +198,7 @@ fn make_map(objects: &mut Vec<Object>) -> Map {
             create_room(new_room, &mut map);
 
             // add some content to this room, such as monsters
-            place_objects(new_room, objects);
+            place_objects(new_room, &map, objects);
 
             // center coordinates of the new room, will be useful later
             let (new_x, new_y) = new_room.center();
@@ -233,7 +233,8 @@ fn make_map(objects: &mut Vec<Object>) -> Map {
     map
 }
 
-fn place_objects(room: Rect, objects: &mut Vec<Object>) {
+fn place_objects(room: Rect, map: &Map, objects: &mut Vec<Object>) {
+    // choose random number of monsters
     let num_monsters = rand::thread_rng().gen_range(0, MAX_ROOM_MONSTERS + 1);
 
     for _ in 0..num_monsters {
@@ -241,14 +242,18 @@ fn place_objects(room: Rect, objects: &mut Vec<Object>) {
         let x = rand::thread_rng().gen_range(room.x1 + 1, room.x2);
         let y = rand::thread_rng().gen_range(room.y1 + 1, room.y2);
 
-        let mut monster = if rand::random::<f32>() < 0.8 {  // 80% chance of getting an orc
-            // create an orc
-            Object::new(x, y, 'o', "orc", colors::DESATURATED_GREEN, true)
-        } else {
-            Object::new(x, y, 'T', "troll", colors::DARKER_GREEN, true)
-        };
-
-        objects.push(monster);
+        // only place it if the tile is not blocked
+        if !is_blocked(x, y, map, objects) {
+            let mut monster = if rand::random::<f32>() < 0.8 {  // 80% chance of getting an orc
+                // create an orc
+                Object::new(x, y, 'o', "orc", colors::DESATURATED_GREEN, true)
+            } else {
+                // create a troll
+                Object::new(x, y, 'T', "troll", colors::DARKER_GREEN, true)
+            };
+            monster.alive = true;
+            objects.push(monster);
+        }
     }
 }
 
