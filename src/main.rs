@@ -302,6 +302,26 @@ fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mu
     blit(con, (0, 0), (MAP_WIDTH, MAP_HEIGHT), root, (0, 0), 1.0, 1.0);
 }
 
+fn player_move_or_attack(dx: i32, dy: i32, map: &Map, objects: &mut [Object]) {
+    // the coordinates the player is moving to/attacking
+    let x = objects[PLAYER].x + dx;
+    let y = objects[PLAYER].y + dy;
+
+    // try to find an attackable object there
+    let target_id = objects.iter().position(|object| {
+        object.pos() == (x, y)
+    });
+
+    // attack if target found, move otherwise
+    match target_id {
+        Some(target_id) => {
+            println!("The {} laughs at your puny efforts to attack him!", objects[target_id].name);
+        }
+        None => {
+            move_by(PLAYER, dx, dy, map, objects);
+        }
+    }
+}
 
 fn handle_keys(root: &mut Root, map: &Map, objects: &mut [Object]) -> PlayerAction {
     use tcod::input::Key;
@@ -321,19 +341,19 @@ fn handle_keys(root: &mut Root, map: &Map, objects: &mut [Object]) -> PlayerActi
 
         // movement keys
         (Key { code: Up, .. }, true) => {
-            move_by(PLAYER, 0, -1, map, objects);
+            player_move_or_attack(0, -1, map, objects);
             TookTurn
         }
         (Key { code: Down, .. }, true) => {
-            move_by(PLAYER, 0, 1, map, objects);
+            player_move_or_attack(0, 1, map, objects);
             TookTurn
         }
         (Key { code: Left, .. }, true) => {
-            move_by(PLAYER, -1, 0, map, objects);
+            player_move_or_attack(-1, 0, map, objects);
             TookTurn
         }
         (Key { code: Right, .. }, true) => {
-            move_by(PLAYER, 1, 0, map, objects);
+            player_move_or_attack(1, 0, map, objects);
             TookTurn
         }
 
@@ -398,6 +418,16 @@ fn main() {
         let player_action = handle_keys(&mut root, &map, &mut objects);
         if player_action == PlayerAction::Exit {
             break
+        }
+
+        // let monsters take their turn
+        if objects[PLAYER].alive && player_action != PlayerAction::DidntTakeTurn {
+            for object in &objects {
+                // only if object is not player
+                if (object as *const _) != (&objects[PLAYER] as *const _) {
+                    println!("The {} growls!", object.name);
+                }
+            }
         }
     }
 }
