@@ -5,3 +5,8 @@ authors = ["JCGrant <jamescolin.grant@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+tcod = { version = "0.13", features = ["serialization"] }
+rand = "0.3"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
