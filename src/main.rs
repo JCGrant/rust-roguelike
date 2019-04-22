@@ -20,6 +20,7 @@ const MAP_HEIGHT: i32 = 45;
 const ROOM_MAX_SIZE: i32 = 10;
 const ROOM_MIN_SIZE: i32 = 6;
 const MAX_ROOMS: i32 = 30;
+const MAX_ROOM_MONSTERS: i32 = 3;
 
 const FOV_ALGO: FovAlgorithm = FovAlgorithm::Basic;  // default FOV algorithm
 const FOV_LIGHT_WALLS: bool = true;  // light walls or not
@@ -31,6 +32,9 @@ const COLOR_DARK_WALL: Color = Color { r: 0, g: 0, b: 100 };
 const COLOR_LIGHT_WALL: Color = Color { r: 130, g: 110, b: 50 };
 const COLOR_DARK_GROUND: Color = Color { r: 50, g: 50, b: 150 };
 const COLOR_LIGHT_GROUND: Color = Color { r: 200, g: 180, b: 50 };
+
+// player will always be the first object
+const PLAYER: usize = 0;
 
 type Map = Vec<Vec<Tile>>;
 
@@ -117,6 +121,15 @@ impl Object {
     pub fn clear(&self, con: &mut Console) {
         con.put_char(self.x, self.y, ' ', BackgroundFlag::None);
     }
+
+    pub fn pos(&self) -> (i32, i32) {
+        (self.x, self.y)
+    }
+
+    pub fn set_pos(&mut self, x: i32, y: i32) {
+        self.x = x;
+        self.y = y;
+    }
 }
 
 fn create_room(room: Rect, map: &mut Map) {
@@ -142,13 +155,11 @@ fn create_v_tunnel(y1: i32, y2: i32, x: i32, map: &mut Map) {
     }
 }
 
-fn make_map() -> (Map, (i32, i32)) {
+fn make_map(objects: &mut Vec<Object>) -> Map {
     // fill map with "blocked" tiles
     let mut map = vec![vec![Tile::wall(); MAP_HEIGHT as usize]; MAP_WIDTH as usize];
 
     let mut rooms = vec![];
-
-    let mut starting_position = (0, 0);
 
     for _ in 0..MAX_ROOMS {
         // random width and height
@@ -169,12 +180,15 @@ fn make_map() -> (Map, (i32, i32)) {
             // "paint" it to the map's tiles
             create_room(new_room, &mut map);
 
+            // add some content to this room, such as monsters
+            place_objects(new_room, objects);
+
             // center coordinates of the new room, will be useful later
             let (new_x, new_y) = new_room.center();
 
             if rooms.is_empty() {
                 // this is the first room, where the player starts at
-                starting_position = (new_x, new_y);
+                objects[PLAYER].set_pos(new_x, new_y);
             } else {
                 // all rooms after the first:
                 // connect it to the previous room with a tunnel
@@ -199,14 +213,33 @@ fn make_map() -> (Map, (i32, i32)) {
         }
     }
 
-    (map, starting_position)
+    map
+}
+
+fn place_objects(room: Rect, objects: &mut Vec<Object>) {
+    let num_monsters = rand::thread_rng().gen_range(0, MAX_ROOM_MONSTERS + 1);
+
+    for _ in 0..num_monsters {
+        // choose random spot for this monster
+        let x = rand::thread_rng().gen_range(room.x1 + 1, room.x2);
+        let y = rand::thread_rng().gen_range(room.y1 + 1, room.y2);
+
+        let mut monster = if rand::random::<f32>() < 0.8 {  // 80% chance of getting an orc
+            // create an orc
+            Object::new(x, y, 'o', colors::DESATURATED_GREEN)
+        } else {
+            Object::new(x, y, 'T', colors::DARKER_GREEN)
+        };
+
+        objects.push(monster);
+    }
 }
 
 fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mut Map,
               fov_map: &mut FovMap, fov_recompute: bool) {
     if fov_recompute {
         // recompute FOV if needed (the player moved or something)
-        let player = &objects[0];
+        let player = &objects[PLAYER];
         fov_map.compute_fov(player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO);
 
         // go through all tiles, and set their background color
@@ -282,18 +315,14 @@ fn main() {
     tcod::system::set_fps(LIMIT_FPS);
     let mut con = Offscreen::new(MAP_WIDTH, MAP_HEIGHT);
 
-    // generate map (at this point it's not drawn to the screen)
-    let (mut map, (player_x, player_y)) = make_map();
-
     // create object representing the player
     // place the player inside the first room
-    let player = Object::new(player_x, player_y, '@', colors::WHITE);
+    let mut player = Object::new(0, 0, '@', colors::WHITE);
 
-    // create an NPC
-    let npc = Object::new(SCREEN_WIDTH / 2 - 5, SCREEN_HEIGHT / 2, '@', colors::YELLOW);
+    let mut objects = vec![player];
 
-    // the list of objects with those two
-    let mut objects = [player, npc];
+    // generate map (at this point it's not drawn to the screen)
+    let mut map = make_map(&mut objects);
 
     // create the FOV map, according to the generated map
     let mut fov_map = FovMap::new(MAP_WIDTH, MAP_HEIGHT);
@@ -310,7 +339,7 @@ fn main() {
 
     while !root.window_closed() {
         // render the screen
-        let fov_recompute = previous_player_position != (objects[0].x, objects[0].y);
+        let fov_recompute = previous_player_position != (objects[PLAYER].pos());
         render_all(&mut root, &mut con, &objects, &mut map, &mut fov_map, fov_recompute);
 
         root.flush();
@@ -321,9 +350,8 @@ fn main() {
         }
 
         // handle keys and exit game if needed
-        let player = &mut objects[0];
-        previous_player_position = (player.x, player.y);
-        let exit = handle_keys(&mut root, player, &map);
+        previous_player_position = objects[PLAYER].pos();
+        let exit = handle_keys(&mut root, &mut objects[PLAYER], &map);
         if exit {
             break
         }
