@@ -94,6 +94,8 @@ struct Object {
     name: String,
     blocks: bool,
     alive: bool,
+    fighter: Option<Fighter>,
+    ai: Option<Ai>,
 }
 
 impl Object {
@@ -106,6 +108,8 @@ impl Object {
             name: name.into(),
             blocks: blocks,
             alive: false,
+            fighter: None,
+            ai: None,
         }
     }
 
@@ -148,6 +152,18 @@ fn is_blocked(x: i32, y: i32, map: &Map, objects: &[Object]) -> bool {
         object.blocks && object.pos() == (x, y)
     })
 }
+
+// combat-related properties and methods (monster, player, NPC).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Fighter {
+    max_hp: i32,
+    hp: i32,
+    defence: i32,
+    power: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Ai;
 
 fn create_room(room: Rect, map: &mut Map) {
     // go through the tiles in the rectangle and make them passable
@@ -246,10 +262,16 @@ fn place_objects(room: Rect, map: &Map, objects: &mut Vec<Object>) {
         if !is_blocked(x, y, map, objects) {
             let mut monster = if rand::random::<f32>() < 0.8 {  // 80% chance of getting an orc
                 // create an orc
-                Object::new(x, y, 'o', "orc", colors::DESATURATED_GREEN, true)
+                let mut orc = Object::new(x, y, 'o', "orc", colors::DESATURATED_GREEN, true);
+                orc.fighter = Some(Fighter{max_hp: 10, hp: 10, defence: 0, power: 3});
+                orc.ai = Some(Ai);
+                orc
             } else {
                 // create a troll
-                Object::new(x, y, 'T', "troll", colors::DARKER_GREEN, true)
+                let mut troll = Object::new(x, y, 'T', "troll", colors::DARKER_GREEN, true);
+                troll.fighter = Some(Fighter{max_hp: 16, hp: 16, defence: 1, power: 4});
+                troll.ai = Some(Ai);
+                troll
             };
             monster.alive = true;
             objects.push(monster);
@@ -381,6 +403,7 @@ fn main() {
     // create object representing the player
     let mut player = Object::new(0, 0, '@', "player", colors::WHITE, true);
     player.alive = true;
+    player.fighter = Some(Fighter{max_hp: 30, hp: 30, defence: 2, power: 5});
 
     // the list of objects with just the player
     let mut objects = vec![player];
