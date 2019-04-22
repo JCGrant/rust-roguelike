@@ -138,6 +138,27 @@ impl Object {
         let dy = other.y - self.y;
         ((dx.pow(2) + dy.pow(2)) as f32).sqrt()
     }
+
+    pub fn take_damage(&mut self, damage: i32) {
+        // apply damage if possible
+        if let Some(fighter) = self.fighter.as_mut() {
+            if damage > 0 {
+                fighter.hp -= damage;
+            }
+        }
+    }
+
+    pub fn attack(&mut self, target: &mut Object) {
+        // a simple formula for attack damage
+        let damage = self.fighter.map_or(0, |f| f.power) - target.fighter.map_or(0, |f| f.defence);
+        if damage > 0 {
+            // make the target take some damage
+            println!("{} attacks {} for {} hit points.", self.name, target.name, damage);
+            target.take_damage(damage);
+        } else {
+            println!("{} attacks {} but it has no effect!", self.name, target.name);
+        }
+    }
 }
 
 /// move by the given amount, if the destination is not blocked
@@ -159,6 +180,19 @@ fn move_towards(id: usize, target_x: i32, target_y: i32, map: &Map, objects: &mu
     let dx = (dx as f32 / distance).round() as i32;
     let dy = (dy as f32 / distance).round() as i32;
     move_by(id, dx, dy, map, objects);
+}
+
+/// Mutably borrow two *separate* elements from the given slice.
+/// Panics when the indexes are equal or out of bounds.
+fn mut_two<T>(first_index: usize, second_index: usize, items: &mut [T]) -> (&mut T, &mut T) {
+    assert!(first_index != second_index);
+    let split_at_index = cmp::max(first_index, second_index);
+    let (first_slice, second_slice) = items.split_at_mut(split_at_index);
+    if first_index < second_index {
+        (&mut first_slice[first_index], &mut second_slice[0])
+    } else {
+        (&mut second_slice[0], &mut first_slice[second_index])
+    }
 }
 
 fn is_blocked(x: i32, y: i32, map: &Map, objects: &[Object]) -> bool {
@@ -194,8 +228,8 @@ fn ai_take_turn(monster_id: usize, map: &Map, objects: &mut [Object], fov_map: &
             move_towards(monster_id, player_x, player_y, map, objects);
         } else if objects[PLAYER].fighter.map_or(false, |f| f.hp > 0) {
             // close enough, attack! (if the player is still alive.)
-            let monster = &objects[monster_id];
-            println!("The attack of the {} bounces off your shiny metal armor!", monster.name);
+            let (monster, player) = mut_two(monster_id, PLAYER, objects);
+            monster.attack(player);
         }
     }
 }
@@ -355,6 +389,12 @@ fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mu
         }
     }
 
+    // show the player's stats
+    if let Some(fighter) = objects[PLAYER].fighter {
+        root.print_ex(1, SCREEN_HEIGHT - 2, BackgroundFlag::None, TextAlignment::Left,
+                     format!("HP: {}/{} ", fighter.hp, fighter.max_hp));
+    }
+
     // blit the contents of "con" to the root console
     blit(con, (0, 0), (MAP_WIDTH, MAP_HEIGHT), root, (0, 0), 1.0, 1.0);
 }
@@ -372,7 +412,8 @@ fn player_move_or_attack(dx: i32, dy: i32, map: &Map, objects: &mut [Object]) {
     // attack if target found, move otherwise
     match target_id {
         Some(target_id) => {
-            println!("The {} laughs at your puny efforts to attack him!", objects[target_id].name);
+            let (player, target) = mut_two(PLAYER, target_id, objects);
+            player.attack(target);
         }
         None => {
             move_by(PLAYER, dx, dy, map, objects);
