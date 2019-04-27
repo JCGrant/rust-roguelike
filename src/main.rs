@@ -32,6 +32,7 @@ const MSG_X: i32 = BAR_WIDTH + 2;
 const MSG_WIDTH: i32 = SCREEN_WIDTH - BAR_WIDTH - 2;
 const MSG_HEIGHT: usize = PANEL_HEIGHT as usize - 1;
 const INVENTORY_WIDTH: i32 = 50;
+const CHARACTER_SCREEN_WIDTH: i32 = 30;
 const LEVEL_SCREEN_WIDTH: i32 = 40;
 
 //parameters for dungeon generator
@@ -1275,6 +1276,30 @@ fn handle_keys(
             if player_on_stairs {
                 next_level(tcod, objects, game);
             }
+            DidntTakeTurn
+        }
+
+        (Key { printable: 'c', .. }, true) => {
+            // show character information
+            let player = &objects[PLAYER];
+            let level = player.level;
+            let level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR;
+            if let Some(fighter) = player.fighter.as_ref() {
+                let msg = format!(
+                    "Character information
+
+Level: {}
+Experience: {}
+Experience to level up: {}
+
+Maximum HP: {}
+Attack: {}
+Defence: {}",
+                    level, fighter.xp, level_up_xp, fighter.max_hp, fighter.power, fighter.defence
+                );
+                msgbox(&msg, CHARACTER_SCREEN_WIDTH, &mut tcod.root);
+            }
+
             DidntTakeTurn
         }
 
