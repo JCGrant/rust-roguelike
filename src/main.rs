@@ -168,11 +168,6 @@ impl Object {
         con.put_char(self.x, self.y, self.char, BackgroundFlag::None);
     }
 
-    /// Erase the character that represents this object
-    pub fn clear(&self, con: &mut Console) {
-        con.put_char(self.x, self.y, ' ', BackgroundFlag::None);
-    }
-
     pub fn pos(&self) -> (i32, i32) {
         (self.x, self.y)
     }
@@ -897,31 +892,31 @@ fn render_all(tcod: &mut Tcod, objects: &[Object], game: &mut Game, fov_recomput
         let player = &objects[PLAYER];
         tcod.fov
             .compute_fov(player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO);
+    }
 
-        // go through all tiles, and set their background color
-        for y in 0..MAP_HEIGHT {
-            for x in 0..MAP_WIDTH {
-                let visible = tcod.fov.is_in_fov(x, y);
-                let wall = game.map[x as usize][y as usize].block_sight;
-                let color = match (visible, wall) {
-                    // outside of field of view:
-                    (false, true) => COLOR_DARK_WALL,
-                    (false, false) => COLOR_DARK_GROUND,
-                    // inside fov:
-                    (true, true) => COLOR_LIGHT_WALL,
-                    (true, false) => COLOR_LIGHT_GROUND,
-                };
+    // go through all tiles, and set their background color
+    for y in 0..MAP_HEIGHT {
+        for x in 0..MAP_WIDTH {
+            let visible = tcod.fov.is_in_fov(x, y);
+            let wall = game.map[x as usize][y as usize].block_sight;
+            let color = match (visible, wall) {
+                // outside of field of view:
+                (false, true) => COLOR_DARK_WALL,
+                (false, false) => COLOR_DARK_GROUND,
+                // inside fov:
+                (true, true) => COLOR_LIGHT_WALL,
+                (true, false) => COLOR_LIGHT_GROUND,
+            };
 
-                let explored = &mut game.map[x as usize][y as usize].explored;
-                if visible {
-                    // since it's visible, explore it
-                    *explored = true;
-                }
-                if *explored {
-                    // show explored tiles only (any visible tile is explored already)
-                    tcod.con
-                        .set_char_background(x, y, color, BackgroundFlag::Set);
-                }
+            let explored = &mut game.map[x as usize][y as usize].explored;
+            if visible {
+                // since it's visible, explore it
+                *explored = true;
+            }
+            if *explored {
+                // show explored tiles only (any visible tile is explored already)
+                tcod.con
+                    .set_char_background(x, y, color, BackgroundFlag::Set);
             }
         }
     }
@@ -1239,23 +1234,7 @@ impl MessageLog for Vec<(String, Color)> {
     }
 }
 
-fn main() {
-    let root = Root::initializer()
-        .font("arial10x10.png", FontLayout::Tcod)
-        .font_type(FontType::Greyscale)
-        .size(SCREEN_WIDTH, SCREEN_HEIGHT)
-        .title("Rust/libtcod tutorial")
-        .init();
-    tcod::system::set_fps(LIMIT_FPS);
-
-    let mut tcod = Tcod {
-        root: root,
-        con: Offscreen::new(MAP_WIDTH, MAP_HEIGHT),
-        panel: Offscreen::new(SCREEN_WIDTH, PANEL_HEIGHT),
-        fov: FovMap::new(MAP_WIDTH, MAP_HEIGHT),
-        mouse: Default::default(),
-    };
-
+fn new_game(tcod: &mut Tcod) -> (Vec<Object>, Game) {
     // create object representing the player
     let mut player = Object::new(0, 0, '@', "player", colors::WHITE, true);
     player.alive = true;
@@ -1278,17 +1257,7 @@ fn main() {
         inventory: vec![],
     };
 
-    // create the FOV map, according to the generated map
-    for y in 0..MAP_HEIGHT {
-        for x in 0..MAP_WIDTH {
-            tcod.fov.set(
-                x,
-                y,
-                !game.map[x as usize][y as usize].block_sight,
-                !game.map[x as usize][y as usize].blocked,
-            );
-        }
-    }
+    initialise_fov(&game.map, tcod);
 
     // a warm welcoming message!
     game.log.add(
@@ -1296,12 +1265,33 @@ fn main() {
         colors::RED,
     );
 
+    (objects, game)
+}
+
+fn initialise_fov(map: &Map, tcod: &mut Tcod) {
+    // create the FOV map, according to the generated map
+    for y in 0..MAP_HEIGHT {
+        for x in 0..MAP_WIDTH {
+            tcod.fov.set(
+                x,
+                y,
+                !map[x as usize][y as usize].block_sight,
+                !map[x as usize][y as usize].blocked,
+            );
+        }
+    }
+}
+
+fn play_game(objects: &mut Vec<Object>, game: &mut Game, tcod: &mut Tcod) {
     // force FOV "recompute" first time through the game loop
     let mut previous_player_position = (-1, -1);
 
     let mut key = Default::default();
 
     while !tcod.root.window_closed() {
+        // clear the screen of the previous frame
+        tcod.con.clear();
+
         match input::check_for_event(input::MOUSE | input::KEY_PRESS) {
             Some((_, Event::Mouse(m))) => tcod.mouse = m,
             Some((_, Event::Key(k))) => key = k,
@@ -1310,29 +1300,45 @@ fn main() {
 
         // render the screen
         let fov_recompute = previous_player_position != (objects[PLAYER].pos());
-        render_all(&mut tcod, &objects, &mut game, fov_recompute);
+        render_all(tcod, &objects, game, fov_recompute);
 
         tcod.root.flush();
 
-        // erase all objects at their old locations, before they move
-        for object in &objects {
-            object.clear(&mut tcod.con)
-        }
-
         // handle keys and exit game if needed
         previous_player_position = objects[PLAYER].pos();
-        let player_action = handle_keys(key, &mut tcod, &mut objects, &mut game);
+        let player_action = handle_keys(key, tcod, objects, game);
         if player_action == PlayerAction::Exit {
             break;
         }
 
-        // let monsters take their turn
+        // let monstars take their turn
         if objects[PLAYER].alive && player_action != PlayerAction::DidntTakeTurn {
             for id in 0..objects.len() {
                 if objects[id].ai.is_some() {
-                    ai_take_turn(id, &mut objects, &mut game, &tcod.fov);
+                    ai_take_turn(id, objects, game, &tcod.fov);
                 }
             }
         }
     }
+}
+
+fn main() {
+    let root = Root::initializer()
+        .font("arial10x10.png", FontLayout::Tcod)
+        .font_type(FontType::Greyscale)
+        .size(SCREEN_WIDTH, SCREEN_HEIGHT)
+        .title("Rust/libtcod tutorial")
+        .init();
+    tcod::system::set_fps(LIMIT_FPS);
+
+    let mut tcod = Tcod {
+        root: root,
+        con: Offscreen::new(MAP_WIDTH, MAP_HEIGHT),
+        panel: Offscreen::new(SCREEN_WIDTH, PANEL_HEIGHT),
+        fov: FovMap::new(MAP_WIDTH, MAP_HEIGHT),
+        mouse: Default::default(),
+    };
+
+    let (mut objects, mut game) = new_game(&mut tcod);
+    play_game(&mut objects, &mut game, &mut tcod);
 }
