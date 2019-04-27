@@ -1214,20 +1214,96 @@ fn handle_keys(
         (Key { code: Escape, .. }, _) => Exit, // exit game
 
         // movement keys
-        (Key { code: Up, .. }, true) => {
+        (Key { code: Up, .. }, true)
+        | (
+            Key {
+                code: Char,
+                printable: 'w',
+                ..
+            },
+            true,
+        ) => {
             player_move_or_attack(0, -1, objects, game);
             TookTurn
         }
-        (Key { code: Down, .. }, true) => {
+        (Key { code: Down, .. }, true)
+        | (
+            Key {
+                code: Char,
+                printable: 's',
+                ..
+            },
+            true,
+        ) => {
             player_move_or_attack(0, 1, objects, game);
             TookTurn
         }
-        (Key { code: Left, .. }, true) => {
+        (Key { code: Left, .. }, true)
+        | (
+            Key {
+                code: Char,
+                printable: 'a',
+                ..
+            },
+            true,
+        ) => {
             player_move_or_attack(-1, 0, objects, game);
             TookTurn
         }
-        (Key { code: Right, .. }, true) => {
+        (Key { code: Right, .. }, true)
+        | (
+            Key {
+                code: Char,
+                printable: 'd',
+                ..
+            },
+            true,
+        ) => {
             player_move_or_attack(1, 0, objects, game);
+            TookTurn
+        }
+        (
+            Key {
+                code: Char,
+                printable: 'q',
+                ..
+            },
+            true,
+        ) => {
+            player_move_or_attack(-1, -1, objects, game);
+            TookTurn
+        }
+        (
+            Key {
+                code: Char,
+                printable: 'e',
+                ..
+            },
+            true,
+        ) => {
+            player_move_or_attack(1, -1, objects, game);
+            TookTurn
+        }
+        (
+            Key {
+                code: Char,
+                printable: 'z',
+                ..
+            },
+            true,
+        ) => {
+            player_move_or_attack(-1, 1, objects, game);
+            TookTurn
+        }
+        (
+            Key {
+                code: Char,
+                printable: 'x',
+                ..
+            },
+            true,
+        ) => {
+            player_move_or_attack(1, 1, objects, game);
             TookTurn
         }
 
@@ -1255,7 +1331,7 @@ fn handle_keys(
             DidntTakeTurn
         }
 
-        (Key { printable: 'd', .. }, true) => {
+        (Key { printable: 't', .. }, true) => {
             // show the inventory; if an item is selected, drop it
             let inventory_index = inventory_menu(
                 &game.inventory,
