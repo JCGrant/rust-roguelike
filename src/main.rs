@@ -39,8 +39,6 @@ const LEVEL_SCREEN_WIDTH: i32 = 40;
 const ROOM_MAX_SIZE: i32 = 10;
 const ROOM_MIN_SIZE: i32 = 6;
 const MAX_ROOMS: i32 = 30;
-const MAX_ROOM_MONSTERS: i32 = 3;
-const MAX_ROOM_ITEMS: i32 = 2;
 
 const HEAL_AMOUNT: i32 = 4;
 const LIGHTNING_DAMAGE: i32 = 40;
@@ -712,7 +710,7 @@ fn create_v_tunnel(y1: i32, y2: i32, x: i32, map: &mut Map) {
     }
 }
 
-fn make_map(objects: &mut Vec<Object>) -> Map {
+fn make_map(objects: &mut Vec<Object>, level: u32) -> Map {
     // fill map with "blocked" tiles
     let mut map = vec![vec![Tile::wall(); MAP_HEIGHT as usize]; MAP_WIDTH as usize];
 
@@ -745,7 +743,7 @@ fn make_map(objects: &mut Vec<Object>) -> Map {
             create_room(new_room, &mut map);
 
             // add some content to this room, such as monsters
-            place_objects(new_room, &map, objects);
+            place_objects(new_room, &map, objects, level);
 
             // center coordinates of the new room, will be useful later
             let (new_x, new_y) = new_room.center();
@@ -798,13 +796,58 @@ enum Monster {
     Troll,
 }
 
-fn place_objects(room: Rect, map: &Map, objects: &mut Vec<Object>) {
+struct Transition {
+    level: u32,
+    value: u32,
+}
+
+/// Returns a value that depends on level. the table specifies what
+/// value occurs after each level, default is 0.
+fn from_dungeon_level(table: &[Transition], level: u32) -> u32 {
+    table
+        .iter()
+        .rev()
+        .find(|transition| level >= transition.level)
+        .map_or(0, |transition| transition.value)
+}
+
+fn place_objects(room: Rect, map: &Map, objects: &mut Vec<Object>, level: u32) {
     use rand::distributions::{Distribution, WeightedIndex};
 
+    // maximum number of monsters per room
+    let max_monsters = from_dungeon_level(
+        &[
+            Transition { level: 1, value: 2 },
+            Transition { level: 4, value: 3 },
+            Transition { level: 6, value: 5 },
+        ],
+        level,
+    );
+
     // choose random number of monsters
-    let num_monsters = rand::thread_rng().gen_range(0, MAX_ROOM_MONSTERS + 1);
+    let num_monsters = rand::thread_rng().gen_range(0, max_monsters + 1);
+
+    // monster random table
+    let orc_chance = 80;
+    let troll_chance = from_dungeon_level(
+        &[
+            Transition {
+                level: 3,
+                value: 15,
+            },
+            Transition {
+                level: 5,
+                value: 30,
+            },
+            Transition {
+                level: 7,
+                value: 60,
+            },
+        ],
+        level,
+    );
     let monsters = [Monster::Orc, Monster::Troll];
-    let monster_weights = [80, 20];
+    let monster_weights = [orc_chance, troll_chance];
     let monster_dist = WeightedIndex::new(&monster_weights).unwrap();
     let mut rng = rand::thread_rng();
 
@@ -850,9 +893,47 @@ fn place_objects(room: Rect, map: &Map, objects: &mut Vec<Object>) {
         }
     }
 
-    let num_items = rand::thread_rng().gen_range(0, MAX_ROOM_ITEMS + 1);
+    // maximum number of items per room
+    let max_items = from_dungeon_level(
+        &[
+            Transition { level: 1, value: 1 },
+            Transition { level: 4, value: 2 },
+        ],
+        level,
+    );
+
+    let num_items = rand::thread_rng().gen_range(0, max_items + 1);
+
+    // item random table
+    let heal_chance = 35;
+    let lightning_chance = from_dungeon_level(
+        &[Transition {
+            level: 4,
+            value: 25,
+        }],
+        level,
+    );
+    let fireball_chance = from_dungeon_level(
+        &[Transition {
+            level: 6,
+            value: 25,
+        }],
+        level,
+    );
+    let confuse_chance = from_dungeon_level(
+        &[Transition {
+            level: 2,
+            value: 10,
+        }],
+        level,
+    );
     let item_choices = [Item::Heal, Item::Lightning, Item::Fireball, Item::Confuse];
-    let item_weights = [70, 10, 10, 10];
+    let item_weights = [
+        heal_chance,
+        lightning_chance,
+        fireball_chance,
+        confuse_chance,
+    ];
     let item_dist = WeightedIndex::new(&item_weights).unwrap();
 
     for _ in 0..num_items {
@@ -921,7 +1002,7 @@ fn next_level(tcod: &mut Tcod, objects: &mut Vec<Object>, game: &mut Game) {
         colors::RED,
     );
     game.dungeon_level += 1;
-    game.map = make_map(objects);
+    game.map = make_map(objects, game.dungeon_level);
     initialise_fov(&game.map, tcod);
 }
 
@@ -1522,14 +1603,15 @@ fn new_game(tcod: &mut Tcod) -> (Vec<Object>, Game) {
 
     // the list of objects with just the player
     let mut objects = vec![player];
+    let level = 1;
 
     let mut game = Game {
         // generate map (at this point it's not drawn to the screen)
-        map: make_map(&mut objects),
+        map: make_map(&mut objects, level),
         // create the list of game messages and their colors, starts empty
         log: vec![],
         inventory: vec![],
-        dungeon_level: 1,
+        dungeon_level: level,
     };
 
     initialise_fov(&game.map, tcod);
