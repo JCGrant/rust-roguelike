@@ -875,6 +875,7 @@ fn next_level(tcod: &mut Tcod, objects: &mut Vec<Object>, game: &mut Game) {
          the heart of the dungeon...",
         colors::RED,
     );
+    game.dungeon_level += 1;
     game.map = make_map(objects);
     initialise_fov(&game.map, tcod);
 }
@@ -1014,6 +1015,14 @@ fn render_all(tcod: &mut Tcod, objects: &[Object], game: &mut Game, fov_recomput
         max_hp,
         colors::LIGHT_RED,
         colors::DARKER_RED,
+    );
+
+    tcod.panel.print_ex(
+        1,
+        3,
+        BackgroundFlag::None,
+        TextAlignment::Left,
+        format!("Dungeon level: {}", game.dungeon_level),
     );
 
     // display names of objects under the mouse
@@ -1285,6 +1294,7 @@ struct Game {
     map: Map,
     log: Messages,
     inventory: Vec<Object>,
+    dungeon_level: u32,
 }
 
 trait MessageLog {
@@ -1318,6 +1328,7 @@ fn new_game(tcod: &mut Tcod) -> (Vec<Object>, Game) {
         // create the list of game messages and their colors, starts empty
         log: vec![],
         inventory: vec![],
+        dungeon_level: 1,
     };
 
     initialise_fov(&game.map, tcod);
